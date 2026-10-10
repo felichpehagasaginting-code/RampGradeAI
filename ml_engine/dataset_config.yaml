@@ -1,0 +1,45 @@
+# Konfigurasi Dataset Deteksi Kematangan TBS (IOPRI 1997)
+# SMART GRADE - Politeknik Citra Widya Edukasi (PCWE)
+
+path: ./data
+train: images/train
+val: images/val
+test: images/test
+
+# 4 Kelas Standar IOPRI 1997
+names:
+  0: unripe
+  1: underripe
+  2: ripe
+  3: overripe
+
+# Metadata Penamaan Lokal & Deskripsi
+classes_meta:
+  unripe:
+    id: 0
+    id_name: "Mentah"
+    description: "Buah berwarna hitam pekat/keunguan, brondolan belum lepas, kandungan minyak sangat rendah"
+    oer_potential: 0.12
+    ffa_risk: "low"
+    color_hex: "#1e293b"
+  underripe:
+    id: 1
+    id_name: "Kurang Matang"
+    description: "Buah mulai kemerahan, <10 brondolan lepas alami, potensi rendemen belum maksimal"
+    oer_potential: 0.17
+    ffa_risk: "low"
+    color_hex: "#eab308"
+  ripe:
+    id: 2
+    id_name: "Matang"
+    description: "Fraksi ideal, >10 brondolan lepas alami, warna oranye kemerahan merata, rendemen optimal"
+    oer_potential: 0.235
+    ffa_risk: "normal"
+    color_hex: "#22c55e"
+  overripe:
+    id: 3
+    id_name: "Terlalu Matang"
+    description: "Buah kehitaman lembek, >50% brondolan lepas/jatuh, berisiko FFA tinggi melampaui toleransi ekspor"
+    oer_potential: 0.21
+    ffa_risk: "high"
+    color_hex: "#ef4444"
