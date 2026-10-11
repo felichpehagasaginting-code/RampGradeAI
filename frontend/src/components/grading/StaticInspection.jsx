@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UploadCloud, Play, Sparkles, Image as ImageIcon, ToggleLeft, ToggleRight, Scale } from 'lucide-react';
+import { UploadCloud, Play, Sparkles, Image as ImageIcon, ToggleLeft, ToggleRight, Scale, Layers } from 'lucide-react';
 
 export default function StaticInspection({
   selectedFile,
@@ -15,12 +15,13 @@ export default function StaticInspection({
   setSelectedOrderId
 }) {
   const [longStalkCount, setLongStalkCount] = useState(0);
+  const [denseMode, setDenseMode] = useState(false);
 
   return (
     <div className="space-y-6">
       {/* Upload & Form Controls */}
       <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
           <div>
             <label className="text-xs font-semibold text-slate-300 block mb-1.5">
               Pilih Dokumen Tiket Timbang (SPB):
@@ -53,14 +54,32 @@ export default function StaticInspection({
             />
           </div>
 
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+              Mode Analisis Citra:
+            </label>
+            <button
+              type="button"
+              onClick={() => setDenseMode(!denseMode)}
+              className={`w-full py-2.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
+                denseMode
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-lg shadow-amber-950/30'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              <span>{denseMode ? 'Mode Tumpukan Padat (SAHI)' : 'Mode Standar (Cepat)'}</span>
+            </button>
+          </div>
+
           <div className="flex items-end">
             <button
-              onClick={() => handlePredict(null, longStalkCount)}
+              onClick={() => handlePredict(null, longStalkCount, denseMode)}
               disabled={isLoading || (!selectedFile && !previewImage)}
               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-950/50 disabled:opacity-50 transition-all"
             >
               <Sparkles className="w-4 h-4" />
-              <span>{isLoading ? 'Memproses Inferensi ONNX...' : 'Jalankan Grading AI'}</span>
+              <span>{isLoading ? 'Memproses Hyper-Inference...' : 'Jalankan Grading AI'}</span>
             </button>
           </div>
         </div>

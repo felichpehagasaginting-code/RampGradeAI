@@ -46,11 +46,13 @@ async def predict_grading(
     file: UploadFile = File(...),
     delivery_order_id: Optional[int] = Form(None),
     long_stalk_count: int = Form(0),
+    dense_mode: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     """
     Menerima citra TBS, melakukan inferensi YOLO/ONNX, menghitung estimasi OER & harga beli,
     dan mengembalikan bounding box serta visualisasi teranotasi.
+    dense_mode=True mengaktifkan Slicing Aided Hyper Inference (SAHI) untuk tumpukan padat TBS.
     """
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File harus berformat citra (jpg/png)")
@@ -71,8 +73,8 @@ async def predict_grading(
     with open(orig_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Jalankan inferensi YOLO / ONNX
-    detections, latency_ms = inference_engine.predict(str(orig_path))
+    # Jalankan inferensi YOLO / ONNX (dengan opsi dense_mode SAHI)
+    detections, latency_ms = inference_engine.predict(str(orig_path), dense_mode=dense_mode)
 
     # Gambar bounding box dan anotasi
     inference_engine.draw_annotations(str(orig_path), detections, str(annotated_path))

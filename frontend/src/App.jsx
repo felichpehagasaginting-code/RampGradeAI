@@ -287,7 +287,7 @@ export default function App() {
     }
   };
 
-  const handlePredict = async (customFile = null, stalkCount = 0) => {
+  const handlePredict = async (customFile = null, stalkCount = 0, denseMode = false) => {
     const f = customFile || selectedFile;
     if (!f) return;
     setIsLoading(true);
@@ -296,6 +296,7 @@ export default function App() {
       formData.append('file', f);
       if (selectedOrderId) formData.append('delivery_order_id', selectedOrderId);
       formData.append('long_stalk_count', stalkCount.toString());
+      formData.append('dense_mode', denseMode ? 'true' : 'false');
 
       const res = await fetch('/api/v1/grading/predict', { method: 'POST', body: formData });
       if (res.ok) {

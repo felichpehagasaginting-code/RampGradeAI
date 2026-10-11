@@ -201,15 +201,24 @@ class YOLOInferenceEngine:
 
         return results
 
-    def predict(self, image_input: Any) -> Tuple[List[Dict[str, Any]], float]:
+    def predict(self, image_input: Any, dense_mode: bool = False) -> Tuple[List[Dict[str, Any]], float]:
         """
         Menjalankan deteksi pada citra (file path, bytes, atau PIL Image).
+        - dense_mode=False: Mode cepat standar full-image (~30-50 ms).
+        - dense_mode=True: Slicing Aided Hyper Inference (SAHI) untuk tumpukan padat TBS di ramp.
         Mengembalikan list deteksi: [{class_name, confidence, bbox: [x1, y1, x2, y2]}], latency_ms
         Jika tidak ada objek terdeteksi, mengembalikan list kosong [] secara jujur.
         """
         start_time = time.time()
         source_obj, (w, h) = self._prepare_image(image_input)
         
+        # Jika dense_mode aktif, gunakan Slicing Aided Hyper Inference (SAHI)
+        if dense_mode:
+            detections = self._predict_tiled(source_obj, w, h)
+            detections = self._refine_ripeness_by_chroma(source_obj, detections)
+            latency_ms = (time.time() - start_time) * 1000.0
+            return detections, round(latency_ms, 2)
+
         # 1. Jalankan ONNX jika aktif
         if self.is_onnx and self.model:
             if isinstance(source_obj, str):
@@ -217,6 +226,7 @@ class YOLOInferenceEngine:
             else:
                 pil_img = source_obj
             detections = self._predict_onnx(pil_img, w, h)
+            detections = self._refine_ripeness_by_chroma(source_obj, detections)
             latency_ms = (time.time() - start_time) * 1000.0
             return detections, round(latency_ms, 2)
 
@@ -257,6 +267,134 @@ class YOLOInferenceEngine:
         # Return empty list honestly if no model loaded or no detections found
         latency_ms = (time.time() - start_time) * 1000.0
         return [], round(latency_ms, 2)
+
+    def _to_cv2(self, source_obj: Any):
+        """Konversi sumber citra ke array NumPy OpenCV BGR."""
+        import cv2
+        import numpy as np
+        if isinstance(source_obj, str):
+            return cv2.imread(source_obj)
+        elif isinstance(source_obj, Image.Image):
+            return cv2.cvtColor(np.array(source_obj), cv2.COLOR_RGB2BGR)
+        elif isinstance(source_obj, np.ndarray):
+            return source_obj
+        return None
+
+    def _predict_tiled(self, source_obj: Any, orig_w: int, orig_h: int) -> List[Dict[str, Any]]:
+        """
+        Slicing Aided Hyper Inference (SAHI) untuk tumpukan padat TBS.
+        Membagi citra ke irisan mikro yang diperbesar ke resolusi model (640x640),
+        menerapkan CLAHE lokal, lalu menggabungkan deteksi global dan lokal dengan NMS.
+        """
+        import cv2
+        import numpy as np
+
+        img_cv = self._to_cv2(source_obj)
+        if img_cv is None or not self.model:
+            return []
+
+        h, w = img_cv.shape[:2]
+        # Ukuran tile adaptif proporsional dimensi citra (220 - 320 px)
+        tile_size = max(180, min(300, int(min(w, h) * 0.48)))
+        overlap = 0.35
+        step = max(50, int(tile_size * (1 - overlap)))
+
+        all_candidates = []
+
+        # 1. Inferensi Global Full-Image untuk menangkap tandan besar di depan
+        if hasattr(self.model, "predict"):
+            res_full = self.model.predict(source=img_cv, conf=0.18, iou=0.50, verbose=False)
+            if len(res_full) > 0 and len(res_full[0].boxes) > 0:
+                for b in res_full[0].boxes:
+                    bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+                    roi_cand = img_cv[max(0, int(by1)):min(h, int(by2)), max(0, int(bx1)):min(w, int(bx2))]
+                    if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
+                        hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
+                        green_mask = cv2.inRange(hsv_cand, np.array([35, 40, 40]), np.array([85, 255, 255]))
+                        green_ratio = np.sum(green_mask > 0) / (roi_cand.shape[0] * roi_cand.shape[1])
+                        if green_ratio > 0.28:
+                            continue
+
+                    cls_id = int(b.cls[0])
+                    raw_name = self.model.names[cls_id] if hasattr(self.model, "names") else self.CLASSES[0]
+                    cls_name = self.BINUS_MAPPING.get(raw_name, "ripe")
+                    all_candidates.append([bx1, by1, bx2, by2, float(b.conf[0]), cls_name])
+
+        # 2. Slicing Aided Hyper Inference pada setiap irisan mikro
+        clahe_obj = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        for y in range(0, h, step):
+            for x in range(0, w, step):
+                x1 = min(x, max(0, w - tile_size))
+                y1 = min(y, max(0, h - tile_size))
+                x2 = min(x1 + tile_size, w)
+                y2 = min(y1 + tile_size, h)
+                tile = img_cv[y1:y2, x1:x2]
+                if tile.shape[0] < 40 or tile.shape[1] < 40:
+                    continue
+
+                # Local CLAHE pada irisan untuk memperjelas batas brondolan & tangkai
+                lab = cv2.cvtColor(tile, cv2.COLOR_BGR2LAB)
+                l_chan, a_chan, b_chan = cv2.split(lab)
+                cl = clahe_obj.apply(l_chan)
+                enhanced_tile = cv2.cvtColor(cv2.merge((cl, a_chan, b_chan)), cv2.COLOR_LAB2BGR)
+
+                # Perbesar irisan ke 640x640 agar tandan kecil di belakang ter-magnifikasi 2x-3x
+                tile_resized = cv2.resize(enhanced_tile, (640, 640), interpolation=cv2.INTER_LANCZOS4)
+
+                res_tile = self.model.predict(source=tile_resized, conf=0.20, iou=0.45, verbose=False)
+                if len(res_tile) > 0 and len(res_tile[0].boxes) > 0:
+                    for b_box in res_tile[0].boxes:
+                        tb_x1, tb_y1, tb_x2, tb_y2 = b_box.xyxy[0].tolist()
+                        # Proyeksikan kembali koordinat irisan ke koordinat kanvas global
+                        gx1 = x1 + (tb_x1 / 640.0) * (x2 - x1)
+                        gy1 = y1 + (tb_y1 / 640.0) * (y2 - y1)
+                        gx2 = x1 + (tb_x2 / 640.0) * (x2 - x1)
+                        gy2 = y1 + (tb_y2 / 640.0) * (y2 - y1)
+
+                        # Filter dedaunan hijau di latar belakang pohon/langit
+                        roi_cand = img_cv[max(0, int(gy1)):min(h, int(gy2)), max(0, int(gx1)):min(w, int(gx2))]
+                        if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
+                            hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
+                            green_mask = cv2.inRange(hsv_cand, np.array([35, 40, 40]), np.array([85, 255, 255]))
+                            green_ratio = np.sum(green_mask > 0) / (roi_cand.shape[0] * roi_cand.shape[1])
+                            if green_ratio > 0.28:
+                                continue
+
+                            # Filter awan/langit terbuka terang
+                            sky_pixels = (roi_cand[:, :, 0] > 175) & (roi_cand[:, :, 1] > 175) & (roi_cand[:, :, 2] > 175)
+                            if np.sum(sky_pixels) / (roi_cand.shape[0] * roi_cand.shape[1]) > 0.06:
+                                continue
+
+                        cls_id = int(b_box.cls[0])
+                        raw_name = self.model.names[cls_id] if hasattr(self.model, "names") else self.CLASSES[0]
+                        cls_name = self.BINUS_MAPPING.get(raw_name, "ripe")
+                        all_candidates.append([gx1, gy1, gx2, gy2, float(b_box.conf[0]), cls_name])
+
+        if not all_candidates:
+            return []
+
+        # 3. Batched NMS untuk menggabungkan deteksi global dan irisan
+        boxes_coords = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in all_candidates]
+        confs = [b[4] for b in all_candidates]
+
+        keep_indices = cv2.dnn.NMSBoxes(
+            bboxes=boxes_coords,
+            scores=confs,
+            score_threshold=0.18,
+            nms_threshold=0.38
+        )
+
+        merged_results = []
+        if len(keep_indices) > 0:
+            for idx in keep_indices.flatten():
+                cand = all_candidates[idx]
+                merged_results.append({
+                    "class_name": cand[5],
+                    "confidence": round(float(cand[4]), 3),
+                    "bbox": [round(float(cand[0]), 1), round(float(cand[1]), 1), round(float(cand[2]), 1), round(float(cand[3]), 1)]
+                })
+
+        return merged_results
 
     def _refine_ripeness_by_chroma(self, source_obj: Any, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -318,13 +456,13 @@ class YOLOInferenceEngine:
 
         return detections
 
-    def predict_frame(self, image_input: Any) -> Dict[str, Any]:
+    def predict_frame(self, image_input: Any, dense_mode: bool = False) -> Dict[str, Any]:
         """
         Metode inferensi realtime untuk streaming frame kamera.
         Mengembalikan metadata lengkap termasuk dimensi frame.
         """
         source_obj, (w, h) = self._prepare_image(image_input)
-        detections, latency_ms = self.predict(source_obj)
+        detections, latency_ms = self.predict(source_obj, dense_mode=dense_mode)
         return {
             "detections": detections,
             "latency_ms": latency_ms,
