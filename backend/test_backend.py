@@ -39,8 +39,7 @@ def test_inference_integrity():
     img.save(test_img_path)
     
     engine = YOLOInferenceEngine(model_path=settings.DEFAULT_MODEL_PATH)
-    # Default: allow_fallback=False (wajib mengembalikan list kosong secara jujur)
-    detections, latency = engine.predict(str(test_img_path), allow_fallback=False)
+    detections, latency = engine.predict(str(test_img_path))
     print(f"Hasil inferensi citra polos: {len(detections)} deteksi (latency: {latency} ms)")
     # Pastikan TIDAK mengarang objek palsu pada citra kosong
     assert len(detections) == 0, "Inference engine tidak boleh mengarang deteksi pada citra kosong!"

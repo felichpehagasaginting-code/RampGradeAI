@@ -1,6 +1,5 @@
 import os
 import time
-import random
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 from PIL import Image, ImageDraw, ImageFont
@@ -8,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 class YOLOInferenceEngine:
     """
     Inference Engine untuk Deteksi Kematangan TBS (IOPRI 1997)
-    Mendukung model PyTorch (.pt), ONNX (.onnx), dan fallback simulator untuk pengujian integrasi.
+    Mengeksekusi inferensi nyata berbasis PyTorch (.pt) dan ONNX (.onnx).
     """
 
     # 4 Kelas Standar Fraksi Kematangan PPKS / IOPRI (1997)
@@ -202,7 +201,7 @@ class YOLOInferenceEngine:
 
         return results
 
-    def predict(self, image_input: Any, allow_fallback: bool = False) -> Tuple[List[Dict[str, Any]], float]:
+    def predict(self, image_input: Any) -> Tuple[List[Dict[str, Any]], float]:
         """
         Menjalankan deteksi pada citra (file path, bytes, atau PIL Image).
         Mengembalikan list deteksi: [{class_name, confidence, bbox: [x1, y1, x2, y2]}], latency_ms
@@ -219,8 +218,7 @@ class YOLOInferenceEngine:
                 pil_img = source_obj
             detections = self._predict_onnx(pil_img, w, h)
             latency_ms = (time.time() - start_time) * 1000.0
-            if len(detections) > 0 or not allow_fallback:
-                return detections, round(latency_ms, 2)
+            return detections, round(latency_ms, 2)
 
         # 2. Jika model PyTorch YOLO aktif
         elif self.model and hasattr(self.model, "predict"):
@@ -251,58 +249,19 @@ class YOLOInferenceEngine:
                         "confidence": round(conf, 3),
                         "bbox": [round(c, 1) for c in coords]
                     })
-            if len(detections) > 0 or not allow_fallback:
-                return detections, round(latency_ms, 2)
+            return detections, round(latency_ms, 2)
 
-        # Default behavior: Jika tidak ada objek / tidak ada bobot model tervalidasi, kembalikan hasil kosong secara jujur
-        if not allow_fallback:
-            latency_ms = (time.time() - start_time) * 1000.0
-            return [], round(latency_ms, 2)
-
-        # HANYA untuk demo mockup visual offline bila allow_fallback secara eksplisit diaktifkan
-        print("[DEMO SIMULATOR NOTICE] allow_fallback=True dipanggil secara manual. Menampilkan koordinat simulasi untuk pratinjau layout.")
-        random.seed(int(time.time() * 100) % 10000)
-        num_bunches = random.randint(3, 5)
-        detections = []
-        
-        step_x = w / 3
-        step_y = h / 3
-        
-        for i in range(num_bunches):
-            grid_x = (i % 3) * step_x + random.uniform(10, step_x * 0.2)
-            grid_y = (i // 3) * step_y + random.uniform(10, step_y * 0.2)
-            box_w = random.uniform(step_x * 0.6, step_x * 0.85)
-            box_h = random.uniform(step_y * 0.6, step_y * 0.85)
-            
-            x1 = max(10, min(w - 50, grid_x))
-            y1 = max(10, min(h - 50, grid_y))
-            x2 = min(w - 10, x1 + box_w)
-            y2 = min(h - 10, y1 + box_h)
-            
-            cls_choice = random.choices(
-                population=["ripe", "underripe", "unripe", "overripe"],
-                weights=[0.65, 0.20, 0.08, 0.07],
-                k=1
-            )[0]
-            
-            conf = random.uniform(0.75, 0.95)
-            detections.append({
-                "class_name": cls_choice,
-                "confidence": round(conf, 3),
-                "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                "is_simulated": True
-            })
-
+        # Return empty list honestly if no model loaded or no detections found
         latency_ms = (time.time() - start_time) * 1000.0
-        return detections, round(latency_ms, 2)
+        return [], round(latency_ms, 2)
 
-    def predict_frame(self, image_input: Any, allow_fallback: bool = False) -> Dict[str, Any]:
+    def predict_frame(self, image_input: Any) -> Dict[str, Any]:
         """
         Metode inferensi realtime untuk streaming frame kamera.
         Mengembalikan metadata lengkap termasuk dimensi frame.
         """
         source_obj, (w, h) = self._prepare_image(image_input)
-        detections, latency_ms = self.predict(source_obj, allow_fallback=allow_fallback)
+        detections, latency_ms = self.predict(source_obj)
         return {
             "detections": detections,
             "latency_ms": latency_ms,
