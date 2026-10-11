@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   --bg-app: #f8fafc;
   --bg-sidebar: #ffffff;
