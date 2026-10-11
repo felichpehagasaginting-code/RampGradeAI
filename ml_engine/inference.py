@@ -11,15 +11,14 @@ class YOLOInferenceEngine:
     Mendukung model PyTorch (.pt), ONNX (.onnx), dan fallback simulator untuk pengujian integrasi.
     """
 
-    CLASSES = ["unripe", "underripe", "ripe", "overripe", "empty_bunch", "abnormal"]
+    # 4 Kelas Standar Fraksi Kematangan PPKS / IOPRI (1997)
+    CLASSES = ["unripe", "underripe", "ripe", "overripe"]
     
     CLASS_COLORS = {
-        "unripe": "#334155",      # Slate dark
-        "underripe": "#eab308",   # Amber
-        "ripe": "#22c55e",        # Emerald green
-        "overripe": "#ef4444",    # Rose red
-        "empty_bunch": "#d97706", # Orange brown
-        "abnormal": "#8b5cf6"     # Purple violet
+        "unripe": "#334155",      # Slate dark (Hitam/Ungu mentah)
+        "underripe": "#eab308",   # Amber (Kuning kemerahan)
+        "ripe": "#22c55e",        # Emerald green (Oranye kemerahan ideal)
+        "overripe": "#ef4444"     # Rose red (Merah kehitaman lewat masak)
     }
     
     CLASS_LABELS_ID = {
@@ -203,10 +202,11 @@ class YOLOInferenceEngine:
 
         return results
 
-    def predict(self, image_input: Any, allow_fallback: bool = True) -> Tuple[List[Dict[str, Any]], float]:
+    def predict(self, image_input: Any, allow_fallback: bool = False) -> Tuple[List[Dict[str, Any]], float]:
         """
         Menjalankan deteksi pada citra (file path, bytes, atau PIL Image).
         Mengembalikan list deteksi: [{class_name, confidence, bbox: [x1, y1, x2, y2]}], latency_ms
+        Jika tidak ada objek terdeteksi, mengembalikan list kosong [] secara jujur.
         """
         start_time = time.time()
         source_obj, (w, h) = self._prepare_image(image_input)
@@ -221,8 +221,6 @@ class YOLOInferenceEngine:
             latency_ms = (time.time() - start_time) * 1000.0
             if len(detections) > 0 or not allow_fallback:
                 return detections, round(latency_ms, 2)
-            else:
-                print("[YOLO Engine] ONNX executed (0 raw objects detected). Applying IOPRI fallback for demo.")
 
         # 2. Jika model PyTorch YOLO aktif
         elif self.model and hasattr(self.model, "predict"):
@@ -255,16 +253,16 @@ class YOLOInferenceEngine:
                     })
             if len(detections) > 0 or not allow_fallback:
                 return detections, round(latency_ms, 2)
-            else:
-                print("[YOLO Engine] PyTorch YOLOv8 executed (0 raw objects detected). Applying IOPRI fallback for demo.")
 
+        # Default behavior: Jika tidak ada objek / tidak ada bobot model tervalidasi, kembalikan hasil kosong secara jujur
         if not allow_fallback:
             latency_ms = (time.time() - start_time) * 1000.0
             return [], round(latency_ms, 2)
 
-        # Fallback Simulator untuk pengujian simulasi demo jika objek TBS belum terdeteksi
+        # HANYA untuk demo mockup visual offline bila allow_fallback secara eksplisit diaktifkan
+        print("[DEMO SIMULATOR NOTICE] allow_fallback=True dipanggil secara manual. Menampilkan koordinat simulasi untuk pratinjau layout.")
         random.seed(int(time.time() * 100) % 10000)
-        num_bunches = random.randint(4, 8)
+        num_bunches = random.randint(3, 5)
         detections = []
         
         step_x = w / 3
@@ -283,18 +281,19 @@ class YOLOInferenceEngine:
             
             cls_choice = random.choices(
                 population=["ripe", "underripe", "unripe", "overripe"],
-                weights=[0.60, 0.25, 0.08, 0.07],
+                weights=[0.65, 0.20, 0.08, 0.07],
                 k=1
             )[0]
             
-            conf = random.uniform(0.78, 0.98)
+            conf = random.uniform(0.75, 0.95)
             detections.append({
                 "class_name": cls_choice,
                 "confidence": round(conf, 3),
-                "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)]
+                "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+                "is_simulated": True
             })
 
-        latency_ms = (time.time() - start_time) * 1000.0 + random.uniform(25.0, 65.0)
+        latency_ms = (time.time() - start_time) * 1000.0
         return detections, round(latency_ms, 2)
 
     def predict_frame(self, image_input: Any, allow_fallback: bool = False) -> Dict[str, Any]:

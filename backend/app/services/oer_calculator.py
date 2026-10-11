@@ -4,8 +4,15 @@ from backend.app.schemas.schemas import OERCalculationResult
 
 class OERCalculator:
     """
-    Kalkulator estimasi Oil Extraction Rate (OER) dan Indeks Mutu TBS
-    berdasarkan standar fraksi kematangan IOPRI (1997) dan Pedoman Mutu TBS Kelapa Sawit.
+    Kalkulator estimasi Oil Extraction Rate (OER) dan Indeks Mutu TBS.
+    
+    CATATAN ILMIAH & METODOLOGI RISET:
+    Koefisien rendemen fraksi (Unripe 12%, Underripe 17%, Ripe 23.5%, Overripe 21%)
+    dan formula penalti mutu dalam modul ini merupakan formulasi baseline heuristik
+    (preliminary placeholder) yang diturunkan dari literatur agronomi Wood et al. dan IOPRI (1997).
+    Dalam implementasi riset lapangan BPDP, nilai-nilai parameter ini dirancang untuk
+    dikalibrasi ulang secara empiris menggunakan data uji laboratorium ekstraksi Soxhlet
+    di PKS mitra.
     """
 
     @classmethod

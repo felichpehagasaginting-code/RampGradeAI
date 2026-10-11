@@ -79,5 +79,10 @@ def download_and_extract_roboflow_direct(
     return True
 
 if __name__ == "__main__":
-    api_key = sys.argv[1] if len(sys.argv) > 1 else "isK946ZQlgZXh5irkXiT"
+    api_key = os.getenv("ROBOFLOW_API_KEY") or (sys.argv[1] if len(sys.argv) > 1 else None)
+    if not api_key:
+        print("[ERROR] API Key Roboflow tidak ditemukan.")
+        print("Set variabel lingkungan ROBOFLOW_API_KEY atau jalankan dengan argumen:")
+        print("  python download_dataset.py <YOUR_API_KEY>")
+        sys.exit(1)
     download_and_extract_roboflow_direct(api_key=api_key)

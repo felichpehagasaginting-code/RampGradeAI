@@ -140,7 +140,7 @@ erDiagram
     DETECTION_ITEM {
         int id PK
         int grading_session_id FK
-        string class_name "ripe / underripe / unripe / overripe / empty_bunch / abnormal"
+        string class_name "ripe / underripe / unripe / overripe"
         float confidence "Skor Kepercayaan 0.0 - 1.0"
         float bbox_x1
         float bbox_y1

@@ -29,26 +29,34 @@ def test_oer_calculation():
     assert res.estimated_oer_percentage > 20.0
     print("[PASS] OER Calculator Test Passed!\n")
 
-def test_inference_simulator():
-    print("=== Testing Inference Engine & Annotator ===")
-    # Buat dummy image untuk tes inferensi
+def test_inference_integrity():
+    print("=== Testing Inference Engine Integrity ===")
     test_img_path = settings.UPLOAD_DIR / "test_sample_tbs.jpg"
     annotated_img_path = settings.UPLOAD_DIR / "test_sample_annotated.jpg"
     
+    # 1. Citra kanvas polos tanpa objek TBS
     img = Image.new("RGB", (640, 640), color=(40, 60, 45))
     img.save(test_img_path)
     
     engine = YOLOInferenceEngine(model_path=settings.DEFAULT_MODEL_PATH)
-    detections, latency = engine.predict(str(test_img_path))
-    print(f"Deteksi ditemukan: {len(detections)} tandan, latency: {latency} ms")
-    assert len(detections) > 0
+    # Default: allow_fallback=False (wajib mengembalikan list kosong secara jujur)
+    detections, latency = engine.predict(str(test_img_path), allow_fallback=False)
+    print(f"Hasil inferensi citra polos: {len(detections)} deteksi (latency: {latency} ms)")
+    # Pastikan TIDAK mengarang objek palsu pada citra kosong
+    assert len(detections) == 0, "Inference engine tidak boleh mengarang deteksi pada citra kosong!"
+    print("[PASS] Integritas inferensi jujur terverifikasi: 0 deteksi palsu.")
     
-    engine.draw_annotations(str(test_img_path), detections, str(annotated_img_path))
+    # 2. Uji fungsi rendering anotasi visual dengan data deteksi eksplisit
+    sample_detections = [
+        {"class_name": "ripe", "confidence": 0.92, "bbox": [50.0, 50.0, 200.0, 200.0]},
+        {"class_name": "underripe", "confidence": 0.85, "bbox": [250.0, 100.0, 420.0, 300.0]}
+    ]
+    engine.draw_annotations(str(test_img_path), sample_detections, str(annotated_img_path))
     assert annotated_img_path.exists()
     print(f"Anotasi citra tersimpan di: {annotated_img_path}")
-    print("[PASS] Inference Engine & Annotator Test Passed!\n")
+    print("[PASS] Rendering anotasi visual berhasil diverifikasi!\n")
 
 if __name__ == "__main__":
     test_oer_calculation()
-    test_inference_simulator()
-    print("Semua pengujian unit test backend dan domain core berhasil!")
+    test_inference_integrity()
+    print("Semua pengujian unit test backend dan integritas ilmiah berhasil!")

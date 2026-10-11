@@ -1,116 +1,88 @@
 # Software Requirements Specification (SRS)
-## Proyek RampGradeAI (SMART GRADE Enterprise)
-### Sistem Deteksi Kematangan TBS, Mutu Fisik, Tracking Loading Ramp & Ketertelusuran EUDR Berbasis Deep Learning
+## Proyek SMART GRADE: Sistem Deteksi Kematangan TBS (Smart Indicator) & Ketertelusuran Rantai Pasok Berbasis Deep Learning
 
 **Institusi**: Politeknik Citra Widya Edukasi (PCWE), Bekasi  
-**Program Riset**: Hibah Riset Sawit / Lomba Riset Mahasiswa BPDP 2026-2027  
-**Fokus Riset**: Pasca Panen & Pengolahan Kelapa Sawit (Smart Indicator TBS, Edge Vision & Traceability ISPO/RSPO/EUDR)  
-**Status Dokumen**: Comprehensive Engineering Baseline (Waves 1 & 2 Completed)  
-**Versi Dokumen**: 2.0.0 (Enterprise Release)
+**Program Riset**: Usulan Lomba Riset Mahasiswa BPDP 2026–2027  
+**Fokus Riset**: Pasca Panen & Pengolahan Kelapa Sawit (Smart Indicator & Traceability IoT/AI)  
+**Status Dokumen**: Spesifikasi Kebutuhan Purwarupa Awal (Preliminary Prototype - TRL 3)  
+**Versi Dokumen**: 1.5.0 (Selaras Proposal Riset BPDP)
 
 ---
 
 ## 1. Pendahuluan
 
-### 1.1 Latar Belakang & Masalah Industri
-1. **Bias & Subjektivitas Grader Manual**: Berdasarkan investigasi lapangan dan studi empiris (Sutopo et al., 2021; Oyelade et al., 2025), tingkat diskrepansi dan bias grader manusia pada proses sortasi manual di *loading ramp* Pabrik Kelapa Sawit (PKS) mencapai **18.4% – 24.1%**. Hal ini memicu sengketa transparansi harga antara manajemen pabrik dan pekebun swadaya.
-2. **Stagnasi Rendemen (OER) & Akumulasi ALB (FFA)**:
-   - Masuknya fraksi mentah (*unripe/underripe*) ke sterilizer menyebabkan rendemen CPO (*Oil Extraction Rate*) stagnan di kisaran 19%–21% dan pemborosan uap pemrosesan.
-   - Pencampuran buah terlalu matang (*overripe*) dan tandan busuk mengakibatkan hidrolisis enzimatik pascapanen yang mendongkrak Asam Lemak Bebas (*Free Fatty Acid* / FFA) melampaui ambang batas ekspor internasional 5% (Khoo et al., 2021).
-3. **Cacat Fisik & Disiplin Panen**: Tandan dengan tangkai panjang (*long stalk* > 5 cm) menyerap minyak pada proses peremasan, sementara tandan kosong (*empty bunch*) dan abnormalitas buah menurunkan kapasitas olah pabrik.
-4. **Regulasi Ketat EUDR & Sertifikasi Keberlanjutan**: Pemberlakuan *European Union Deforestation Regulation* (EUDR 2023/1115) dan mandat ISPO/RSPO mewajibkan penyertaan poligon geolokasi WGS84 asal kebun yang bebas deforestasi (cut-off 31 Desember 2020) per pengiriman tandan sawit (Pacheco et al., 2024).
+### 1.1 Latar Belakang & Masalah
+1. **Keterbatasan Grading Manual**: Proses penentuan fraksi kematangan Tandan Buah Segar (TBS) di *loading ramp* jembatan timbang Pabrik Kelapa Sawit (PKS) saat ini mengandalkan inspeksi visual manual oleh petugas grader. Metode ini rentan terhadap variasi subjektif antar individu dan kelelahan fisik saat antrean truk tinggi.
+2. **Korelasi Fraksi terhadap Rendemen (OER) & Asam Lemak Bebas (FFA)**:
+   - Buah mentah (*unripe*) dan kurang matang (*underripe*) memiliki kandungan minyak mesokarp yang belum sempurna sehingga menekan perolehan OER pabrik (nasional stagnan di kisaran 19%–21%).
+   - Buah terlalu matang (*overripe*) memicu lonjakan asam lemak bebas (*Free Fatty Acid* / FFA) akibat hidrolisis enzimatik yang merugikan mutu CPO.
+3. **Tuntutan Ketertelusuran (Traceability)**: Penerapan sertifikasi ISPO/RSPO dan regulasi global EUDR (2023/1115) menuntut integrasi pencatatan mutu buah dengan identitas pekebun dan geolokasi blok kebun asal.
 
-### 1.2 Tujuan Sistem RampGradeAI
-1. Mengotomatisasi inspeksi mutu dan klasifikasi kematangan TBS secara *real-time* (< 30 ms per frame streaming, < 400 ms per foto statis) menggunakan model komputer visi teroptimasi.
-2. Mendeteksi **6 kelas standar kematangan dan kelainan fisik PPKS/IOPRI**:
-   - `ripe` (Matang)
-   - `underripe` (Kurang Matang)
-   - `unripe` (Mentah)
-   - `overripe` (Terlalu Matang / Lewat Masak)
-   - `empty_bunch` (Tandan Kosong)
-   - `abnormal` (Tandan Abnormal / Busuk / Partenokarpi)
-   serta kalkulasi penalti tangkai panjang (*long stalk*).
-3. Melacak dan menghitung TBS saat dijatuhkan dari bak truk ke hopper menggunakan algoritma **ByteTrack Spatial Multi-Object Tracking** dan **Virtual Tripwire**.
-4. Melakukan normalisasi citra adaptif terhadap pencahayaan ekstrem lapangan menggunakan **CLAHE (Contrast Limited Adaptive Histogram Equalization)** pada kanal Luminansi LAB.
-5. Menyediakan kalkulator **Dynamic Fair-Pricing** transparan sesuai pedoman Permentan No. 01/2018 untuk mencegah sengketa harga dengan petani swadaya.
-6. Menyediakan portal transparansi pekebun (**Farmer Transparency Portal PWA**), sertifikat digital terverifikasi QR code (**ReportLab PDF Certificate**), dan **Lembar Hasil Penimbangan (LHP) Excel Exporter**.
-7. Menghubungkan seluruh data grading dengan koordinat poligon WGS84 kebun (**EUDR & ISPO Compliance**).
-8. Mengimplementasikan siklus **Active Learning & Edge MLOps** untuk peningkatan akurasi model mandiri di edge server PKS.
+### 1.2 Tujuan Sistem Purwarupa
+1. Mengembangkan purwarupa awal alat deteksi kematangan TBS secara *real-time* berbasis visi komputer deep learning (keluarga arsitektur YOLO).
+2. Mengklasifikasikan TBS ke dalam **4 kelas fraksi kematangan standar IOPRI (1997)**:
+   - **Mentah (Unripe)**
+   - **Kurang Matang (Underripe)**
+   - **Matang (Ripe)**
+   - **Terlalu Matang (Overripe)**
+3. Menghitung estimasi *Oil Extraction Rate* (OER) terbobot berdasarkan formula baseline heuristik agronomi.
+4. Menghubungkan sesi penilaian grading dengan nomor Surat Pengantar Buah (SPB), data petani, dan titik/poligon kebun asal.
 
 ---
 
 ## 2. Kebutuhan Fungsional (Functional Requirements - FR)
 
-### Modul 1: Vision Engine & Image Preprocessing
-* **FR-01 (Adaptive Lighting CLAHE)**: Sistem harus menerapkan normalisasi CLAHE pada ruang warna CIE LAB sebelum inferensi untuk mereduksi pengaruh bayangan tajam dan sinar matahari langsung pada ramp terbuka.
-* **FR-02 (Multi-Class Defect & Ripeness Detection)**: Sistem mampu mendeteksi bounding box, label kelas, dan skor kepercayaan untuk 6 kelas standar (ripe, underripe, unripe, overripe, empty bunch, abnormal).
-* **FR-03 (Dual-Engine Inference Deployment)**: Sistem mendukung inferensi berbasis PyTorch Ultralytics dan runtime ONNX berakselerasi DirectML/OpenVINO/CPU untuk efisiensi edge hardware.
-* **FR-04 (Heuristic Long Stalk Detection)**: Sistem mendeteksi rasio aspek bounding box untuk mengidentifikasi keberadaan tangkai panjang (> 5 cm) yang melanggar SOP panen.
+### Modul 1: Image Acquisition & Inference Engine
+* **FR-01**: Sistem mampu menerima input citra berupa unggahan foto digital (`.jpg`, `.jpeg`, `.png`) dari kamera *loading ramp*.
+* **FR-02**: Sistem menjalankan inferensi model YOLOv8 (format PyTorch `.pt` dan ONNX) dengan output *bounding box*, label fraksi kematangan, dan *confidence score*.
+* **FR-03**: Sistem menerapkan filter batas kepercayaan (*confidence thresholding* $\ge 0.40$) dan *Non-Maximum Suppression* (NMS IoU $\ge 0.45$).
+* **FR-04**: Jika citra tidak memuat objek TBS, sistem secara jujur mengembalikan hasil deteksi kosong (`[]`) tanpa mengarang objek acak.
 
-### Modul 2: Dynamic Tracking & Virtual Tripwire
-* **FR-05 (ByteTrack Spatial Multi-Object Tracking)**: Sistem melacak pergerakan tandan buah saat meluncur di hopper dengan ID unik konstan antar frame.
-* **FR-06 (Bidirectional Virtual Tripwire)**: Sistem menyediakan garis pembatas virtual yang dapat dikonfigurasi posisinya pada kanvas video. Setiap tandan yang melintasi tripwire dihitung satu kali (*no double counting*).
+### Modul 2: Decision Support & Estimasi OER
+* **FR-05**: Sistem menghitung distribusi persentase fraksi kematangan ($P_{\text{unripe}}, P_{\text{underripe}}, P_{\text{ripe}}, P_{\text{overripe}}$).
+* **FR-06**: Sistem menghitung estimasi OER batch menggunakan formula baseline heuristik terbobot.
+* **FR-07**: Sistem menyediakan kalkulasi simulasi penalti mutu sesuai pedoman Permentan No. 01/2018 sebagai bahan evaluasi transparansi penetapan harga.
 
-### Modul 3: Dynamic Fair-Pricing & Quality Formulation
-* **FR-07 (OER Estimation)**: Sistem menghitung estimasi rendemen minyak (OER) terbobot berdasarkan distribusi persentase kematangan per truk.
-* **FR-08 (Penalti Mutu Progresif)**: Sistem menerapkan potongan penalti harga berdasarkan persentase buah mentah ($100\%$ penalti), kurang matang (di atas ambang 5%), tangkai panjang, dan tandan kosong sesuai Permentan No. 01/2018.
-* **FR-09 (Simulasi Payout)**: Sistem menghitung harga bersih per kilogram dan total pembayaran rupiah berdasarkan berat bersih timbangan jembatan timbang.
+### Modul 3: Manajemen Ketertelusuran (Traceability)
+* **FR-08**: Sistem mencatat master data Petani (ID Petani, Nama, NIK, Koperasi/Kelompok Tani, Status Sertifikasi ISPO/RSPO).
+* **FR-09**: Sistem mencatat master data Blok Kebun (ID Blok, Luas Hektar, Titik Koordinat Lat/Long, Poligon WGS84 GeoJSON).
+* **FR-10**: Sistem mencatat transaksi Penerimaan TBS / Surat Pengantar Buah (SPB) terhubung ke nomor polisi truk dan bobot netto timbangan.
+* **FR-11**: Setiap sesi grading tertaut secara unik (*foreign key*) ke nomor tiket SPB, menghasilkan log audit yang tidak dapat dimanipulasi.
 
-### Modul 4: Traceability & EUDR GeoJSON Compliance
-* **FR-10 (Registrasi Petani & Sertifikasi)**: Sistem mengelola data pekebun (NIK, nama, nomor telepon, koperasi, status ISPO/RSPO).
-* **FR-11 (WGS84 Polygon Mapping)**: Sistem menyimpan dan memvisualisasikan poligon batas kebun (GeoJSON Polygon) serta menghitung kepatuhan EUDR (titik koordinat lengkap, area hektar, tahun tanam).
-* **FR-12 (Penerimaan SPB & Immutable Audit)**: Setiap sesi grading terkunci ke nomor Surat Pengantar Buah (SPB) dan ID pengiriman.
-
-### Modul 5: Dokumentasi Digital, Pelaporan, & Farmer Transparency
-* **FR-13 (Digital PDF Certificate with Dynamic QR Code)**: Sistem mengenerate sertifikat digital resmi hasil grading berformat PDF dengan QR Code yang dapat dipindai oleh auditor atau petani untuk verifikasi integritas data.
-* **FR-14 (Excel LHP Exporter)**: Sistem mengekspor laporan grading harian dalam format spreadsheet Lembar Hasil Penimbangan (LHP) berstandar pabrik sawit.
-* **FR-15 (Farmer Transparency Portal PWA)**: Petani dapat mengakses portal swadaya berbasis web/PWA untuk mengecek hasil sortasi truk mereka secara real-time.
-
-### Modul 6: Streaming Real-Time & Edge Resilience
-* **FR-16 (WebSocket Binary Streaming)**: Endpoint `/ws-stream` menyediakan transmisi frame terdeteksi dan metadata telemetri FPS/latency secara biner melalui WebSocket dua arah.
-* **FR-17 (Industrial RTSP Camera Worker)**: Sistem memiliki background worker multithreaded dengan reconnection otomatis untuk menangkap streaming CCTV IP camera H.264/RTSP.
-* **FR-18 (Offline-First Sync Manager)**: Sistem menyimpan data grading ke local storage/SQLite saat jaringan internet terputus dan melakukan sinkronisasi otomatis ke cloud server saat konektivitas pulih.
-
-### Modul 7: Edge MLOps & Active Learning
-* **FR-19 (Uncertainty Ingestion)**: Sistem secara otomatis menandai citra dengan tingkat kepercayaan marjinal ($0.30 \le \text{confidence} \le 0.60$) ke dalam antrean review Active Learning.
-* **FR-20 (Manual Relabel & Fine-Tuning Trigger)**: Operator ahli dapat melakukan re-labeling bounding box dan memicu proses fine-tuning model latar belakang (*background retrain task*).
+### Modul 4: Antarmuka Dashboard & Pelaporan
+* **FR-12**: Menampilkan dashboard operator yang memvisualisasikan citra hasil deteksi, rincian hitungan TBS per fraksi, dan estimasi OER.
+* **FR-13**: Menyediakan riwayat sesi grading yang dapat dicari berdasarkan nomor SPB atau nama petani.
+* **FR-14**: Menyediakan fitur ekspor sertifikat hasil grading berformat PDF dilengkapi kode QR untuk verifikasi data.
 
 ---
 
 ## 3. Kebutuhan Non-Fungsional (Non-Functional Requirements - NFR)
 
-* **NFR-01 (Inference Latency)**: Latensi inferensi video streaming $\le 30\text{ ms}$ per frame pada akselerator GPU/NPU dan $\le 400\text{ ms}$ pada CPU standar.
-* **NFR-02 (Akurasi Deteksi)**: Nilai $mAP@0.5 \ge 0.92$ pada 6 kelas uji validasi.
-* **NFR-03 (Edge Reliability)**: Sistem mampu beroperasi penuh 24/7 di remote area tanpa ketergantungan koneksi internet (*full offline autonomous operation*).
-* **NFR-04 (Keamanan & Integritas Data)**: Sertifikat PDF menyertakan cryptographic verification hash; rekaman grading berstatus read-only pasca-komitmen.
-* **NFR-05 (UI Accessibility & Taste-Skill)**: Tampilan visual mematuhi WCAG AA contrast, optical density layout, mobile-first responsive PWA, dan bebas elemen generik AI slop.
+* **NFR-01 (Inference Latency Target)**: Waktu inferensi $\le 1.0\text{ detik}$ per citra resolusi $640\times 640$ pada perangkat CPU/GPU standar.
+* **NFR-02 (Akurasi Target Riset)**: Target capaian model final pada data primer lapangan adalah $mAP@0.5 \ge 0.90$.
+* **NFR-03 (Offline / Edge Capable)**: Backend dan inference engine dapat beroperasi secara mandiri di jaringan lokal (*local intranet*) PKS tanpa ketergantungan internet kontinu.
+* **NFR-04 (Integritas Data)**: Sistem menyimpan metadata waktu presisi dan versi model pada setiap rekaman sesi grading.
 
 ---
 
-## 4. Formulasi Matematis & Domain Engineering
+## 4. Formulasi Matematis Baseline (IOPRI 1997 & Wood et al.)
 
-### 4.1 Estimasi Oil Extraction Rate (OER)
-Formula rendemen minyak empiris terbobot ($\widehat{\text{OER}}$) dengan penyesuaian fraksi cacat:
-$$\widehat{\text{OER}} (\%) = (0.12 \cdot P_{\text{unripe}}) + (0.17 \cdot P_{\text{underripe}}) + (0.235 \cdot P_{\text{ripe}}) + (0.21 \cdot P_{\text{overripe}}) + (0.00 \cdot P_{\text{empty}}) + (0.05 \cdot P_{\text{abnormal}})$$
+### 4.1 Distribusi Fraksi Kematangan
+Untuk total deteksi tandan $N = \sum_{k} n_k$, di mana $k \in \{\text{unripe}, \text{underripe}, \text{ripe}, \text{overripe}\}$:
+$$P_k = \frac{n_k}{N} \times 100\%$$
 
-### 4.2 Indeks Mutu TBS ($Q_{\text{score}}$)
-$$Q_{\text{score}} = \max\left(0.0, \frac{1.0 \cdot n_{\text{ripe}} + 0.7 \cdot n_{\text{underripe}} + 0.4 \cdot n_{\text{overripe}} - 0.5 \cdot n_{\text{empty}} - 0.3 \cdot n_{\text{abnormal}}}{N}\right)$$
-
-### 4.3 Potongan Penalti Harga Sesuai Permentan No. 01/2018
-$$\text{Penalty}_{\text{total}} (\%) = \alpha_{\text{unripe}} \cdot P_{\text{unripe}} + \beta_{\text{underripe}} \cdot \max(0, P_{\text{underripe}} - 5\%) + \gamma_{\text{stalk}} \cdot P_{\text{stalk}} + \delta_{\text{empty}} \cdot P_{\text{empty}}$$
-
-### 4.4 Estimasi Payout Petani
-$$\text{Harga Bersih (Rp/Kg)} = \text{Harga Patokan Disbun} \times \left(1 - \frac{\text{Penalty}_{\text{total}}}{100}\right)$$
-$$\text{Total Payout (Rp)} = \text{Berat Netto Timbangan (Kg)} \times \text{Harga Bersih (Rp/Kg)}$$
+### 4.2 Formula Estimasi OER Baseline
+$$\widehat{\text{OER}} (\%) = (0.12 \cdot P_{\text{unripe}}) + (0.17 \cdot P_{\text{underripe}}) + (0.235 \cdot P_{\text{ripe}}) + (0.21 \cdot P_{\text{overripe}})$$
+> *Catatan: Koefisien rendemen ini merupakan parameter baseline heuristik yang akan dikalibrasi ulang secara empiris menggunakan data uji laboratorium Soxhlet di PKS mitra selama periode riset BPDP.*
 
 ---
 
-## 5. Matriks Ketertelusuran Regulasi (EUDR, ISPO, RSPO)
+## 5. Matriks Ketertelusuran Regulasi
 
-| Komponen Audit | Standar RSPO / ISPO | Regulasi EUDR (2023/1115) | Implementasi RampGradeAI |
+| Parameter Kebutuhan | Standar ISPO / RSPO | Regulasi EUDR (2023/1115) | Field Data SMART GRADE |
 | :--- | :--- | :--- | :--- |
-| **Identitas Pekebun** | KTP, Kelompok Tani, Sertifikat | Operator & Trader ID | `Farmer.farmer_code`, `Farmer.nik`, `Farmer.cooperative_name` |
-| **Batas Geospasial** | Titik pusat & batas blok | Poligon WGS84 GeoJSON presisi | `PlantationBlock.boundary_geojson`, `PlantationBlock.latitude/longitude` |
-| **Deforestasi Cut-off** | 2005 / 2014 cut-off | 31 Desember 2020 cut-off | `PlantationBlock.planting_year`, `PlantationBlock.eudr_compliant` |
-| **Bukti Pengiriman** | SPB fisik tercatat | Due Diligence Reference | `DeliveryOrder.spb_number`, `DeliveryOrder.truck_plate_number` |
-| **Verifikasi Lapangan** | Berita Acara Grading | Digital Verification Audit | Digital Certificate PDF + Dynamic QR Code Verification Hash |
+| **Identitas Pekebun** | Nama & Kelompok Tani | Operator Legal Entity | `Farmer.name`, `Farmer.nik` |
+| **Geolokasi Lahan** | Titik pusat & luas blok | Poligon WGS84 perimeter | `PlantationBlock.boundary_geojson` |
+| **Tahun Tanam** | Legalitas budidaya | Cut-off deforestasi 2020 | `PlantationBlock.planting_year` |
+| **Bukti Pengiriman** | Surat Pengantar Buah | Reference Tracking Number | `DeliveryOrder.spb_number` |
+| **Kualitas TBS** | Fraksi mutu pabrik | Spesifikasi mutu komoditas | `GradingSession.counts`, `OERAssessment` |
