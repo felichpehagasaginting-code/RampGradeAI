@@ -346,10 +346,10 @@ export default function App() {
           <div className="space-y-6">
             {/* Mode Switcher */}
             <div className="flex items-center justify-between bg-slate-900/90 p-3 rounded-2xl border border-slate-800">
-              <div className="flex space-x-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setInspectionMode('camera'); }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
                     inspectionMode === 'camera'
                       ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
                       : 'text-slate-400 hover:text-white'
@@ -360,7 +360,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => { setInspectionMode('photo'); stopCamera(); }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
                     inspectionMode === 'photo'
                       ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
                       : 'text-slate-400 hover:text-white'

@@ -21,7 +21,7 @@ export default function CameraStreamHUD({
     <div className="space-y-4">
       {/* Camera Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-4 rounded-2xl border border-slate-800">
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-3">
           <label className="text-xs font-semibold text-slate-300">Pilih Kamera:</label>
           <select
             value={selectedCameraId}
@@ -41,11 +41,11 @@ export default function CameraStreamHUD({
           </select>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           {tripwireActive && onResetTripwire && (
             <button
               onClick={onResetTripwire}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 flex items-center space-x-1"
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Reset Counter Garis</span>
@@ -56,7 +56,7 @@ export default function CameraStreamHUD({
             <button
               onClick={() => startCamera()}
               disabled={cameraLoading}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center space-x-2 shadow-lg shadow-emerald-950/50 transition-all"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-all"
             >
               <Video className="w-4 h-4" />
               <span>{cameraLoading ? 'Mengaktifkan...' : 'Mulai Streaming Kamera'}</span>
@@ -64,7 +64,7 @@ export default function CameraStreamHUD({
           ) : (
             <button
               onClick={stopCamera}
-              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center space-x-2 shadow-lg shadow-rose-950/50 transition-all"
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-rose-950/50 transition-all"
             >
               <VideoOff className="w-4 h-4" />
               <span>Hentikan Kamera</span>
