@@ -28,16 +28,20 @@ class OERCalculator:
         n_underripe = counts.get("underripe", 0)
         n_ripe = counts.get("ripe", 0)
         n_overripe = counts.get("overripe", 0)
+        n_empty = counts.get("empty_bunch", 0)
+        n_abnormal = counts.get("abnormal", 0)
         n_stalk = counts.get("long_stalk", long_stalk_count)
         
-        total = n_unripe + n_underripe + n_ripe + n_overripe
+        total = n_unripe + n_underripe + n_ripe + n_overripe + n_empty + n_abnormal
         if total == 0:
-            p_unripe = p_underripe = p_ripe = p_overripe = p_stalk = 0.0
+            p_unripe = p_underripe = p_ripe = p_overripe = p_empty = p_abnormal = p_stalk = 0.0
         else:
             p_unripe = (n_unripe / total) * 100.0
             p_underripe = (n_underripe / total) * 100.0
             p_ripe = (n_ripe / total) * 100.0
             p_overripe = (n_overripe / total) * 100.0
+            p_empty = (n_empty / total) * 100.0
+            p_abnormal = (n_abnormal / total) * 100.0
             p_stalk = (n_stalk / total) * 100.0
 
         # 1. Estimasi OER Terbobot
@@ -111,11 +115,15 @@ class OERCalculator:
             underripe_count=n_underripe,
             ripe_count=n_ripe,
             overripe_count=n_overripe,
+            empty_bunch_count=n_empty,
+            abnormal_count=n_abnormal,
             long_stalk_count=n_stalk,
             unripe_percentage=round(p_unripe, 2),
             underripe_percentage=round(p_underripe, 2),
             ripe_percentage=round(p_ripe, 2),
             overripe_percentage=round(p_overripe, 2),
+            empty_bunch_percentage=round(p_empty, 2),
+            abnormal_percentage=round(p_abnormal, 2),
             long_stalk_percentage=round(p_stalk, 2),
             estimated_oer_percentage=round(estimated_oer, 2),
             baseline_oer_percentage=round(target_baseline, 2),

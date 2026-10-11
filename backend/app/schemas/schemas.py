@@ -79,12 +79,16 @@ class OERCalculationResult(BaseModel):
     underripe_count: int
     ripe_count: int
     overripe_count: int
+    empty_bunch_count: int = 0
+    abnormal_count: int = 0
     long_stalk_count: int = 0
     
     unripe_percentage: float
     underripe_percentage: float
     ripe_percentage: float
     overripe_percentage: float
+    empty_bunch_percentage: float = 0.0
+    abnormal_percentage: float = 0.0
     long_stalk_percentage: float = 0.0
     
     estimated_oer_percentage: float
@@ -142,11 +146,15 @@ class CameraFramePredictionResponse(BaseModel):
     underripe_count: int
     ripe_count: int
     overripe_count: int
+    empty_bunch_count: int = 0
+    abnormal_count: int = 0
     long_stalk_count: int = 0
     unripe_percentage: float
     underripe_percentage: float
     ripe_percentage: float
     overripe_percentage: float
+    empty_bunch_percentage: float = 0.0
+    abnormal_percentage: float = 0.0
     long_stalk_percentage: float = 0.0
     estimated_oer_percentage: float
     quality_score: float

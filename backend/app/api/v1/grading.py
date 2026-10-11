@@ -81,7 +81,7 @@ async def predict_grading(
         inference_engine.draw_annotations(str(orig_path), detections, str(annotated_path))
 
         # Agregasi hitungan kelas
-        counts = {"unripe": 0, "underripe": 0, "ripe": 0, "overripe": 0, "long_stalk": int(long_stalk_count)}
+        counts = {"unripe": 0, "underripe": 0, "ripe": 0, "overripe": 0, "empty_bunch": 0, "abnormal": 0, "long_stalk": int(long_stalk_count)}
         for item in detections:
             cls = item["class_name"]
             if cls in counts:
@@ -145,7 +145,7 @@ async def predict_camera_frame(
         tripwire_y = track_res["tripwire_y"]
         cumulative_counted = track_res["counts"]["total_counted"]
 
-    counts = {"unripe": 0, "underripe": 0, "ripe": 0, "overripe": 0}
+    counts = {"unripe": 0, "underripe": 0, "ripe": 0, "overripe": 0, "empty_bunch": 0, "abnormal": 0}
     for item in detections:
         cls = item["class_name"]
         if cls in counts:
@@ -164,11 +164,15 @@ async def predict_camera_frame(
         underripe_count=assessment.underripe_count,
         ripe_count=assessment.ripe_count,
         overripe_count=assessment.overripe_count,
+        empty_bunch_count=assessment.empty_bunch_count,
+        abnormal_count=assessment.abnormal_count,
         long_stalk_count=assessment.long_stalk_count,
         unripe_percentage=assessment.unripe_percentage,
         underripe_percentage=assessment.underripe_percentage,
         ripe_percentage=assessment.ripe_percentage,
         overripe_percentage=assessment.overripe_percentage,
+        empty_bunch_percentage=assessment.empty_bunch_percentage,
+        abnormal_percentage=assessment.abnormal_percentage,
         long_stalk_percentage=assessment.long_stalk_percentage,
         estimated_oer_percentage=assessment.estimated_oer_percentage,
         quality_score=assessment.quality_score,

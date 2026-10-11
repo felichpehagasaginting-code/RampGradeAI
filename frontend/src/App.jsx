@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import HeaderNavigation from './components/layout/HeaderNavigation';
 import CameraStreamHUD from './components/grading/CameraStreamHUD';
 import StaticInspection from './components/grading/StaticInspection';
+import TBSCountsSummary from './components/grading/TBSCountsSummary';
 import OERMetricsCards from './components/grading/OERMetricsCards';
 import EUDRPolygonViewer from './components/traceability/EUDRPolygonViewer';
 import DigitalCertificateModal from './components/certificate/DigitalCertificateModal';
@@ -390,6 +391,7 @@ export default function App() {
                   liveResult={liveResult}
                   onResetTripwire={handleResetTripwire}
                 />
+                <TBSCountsSummary assessment={liveResult} latencyMs={liveResult?.inference_latency_ms} />
                 <OERMetricsCards assessment={liveResult} />
               </div>
             ) : (
@@ -408,7 +410,11 @@ export default function App() {
                   setSelectedOrderId={setSelectedOrderId}
                 />
                 {predictionResult && (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
+                    <TBSCountsSummary
+                      assessment={predictionResult.assessment}
+                      latencyMs={predictionResult.inference_latency_ms}
+                    />
                     <OERMetricsCards assessment={predictionResult.assessment} />
                     <div className="flex justify-end">
                       <button
