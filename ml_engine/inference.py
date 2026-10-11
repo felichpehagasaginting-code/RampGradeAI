@@ -14,19 +14,21 @@ class YOLOInferenceEngine:
     CLASSES = ["unripe", "underripe", "ripe", "overripe"]
     
     CLASS_COLORS = {
-        "unripe": "#334155",      # Slate dark (Hitam/Ungu mentah)
-        "underripe": "#eab308",   # Amber (Kuning kemerahan)
-        "ripe": "#22c55e",        # Emerald green (Oranye kemerahan ideal)
-        "overripe": "#ef4444"     # Rose red (Merah kehitaman lewat masak)
+        "unripe": "#475569",       # Slate 600 (Mentah)
+        "underripe": "#f59e0b",    # Amber 500 (Kurang Matang)
+        "ripe": "#10b981",         # Emerald 500 (Matang)
+        "overripe": "#ef4444",     # Red 500 (Lewat Matang)
+        "empty_bunch": "#a855f7",  # Purple 500 (Janjang Kosong)
+        "abnormal": "#ec4899"      # Pink 500 (Buah Abnormal)
     }
     
     CLASS_LABELS_ID = {
         "unripe": "Mentah",
         "underripe": "Kurang Matang",
         "ripe": "Matang",
-        "overripe": "Terlalu Matang",
+        "overripe": "Lewat Matang",
         "empty_bunch": "Janjang Kosong",
-        "abnormal": "Buah Pasir / Abnormal"
+        "abnormal": "Buah Abnormal"
     }
 
     BINUS_MAPPING = {
@@ -282,9 +284,9 @@ class YOLOInferenceEngine:
 
     def _predict_tiled(self, source_obj: Any, orig_w: int, orig_h: int) -> List[Dict[str, Any]]:
         """
-        Slicing Aided Hyper Inference (SAHI) untuk tumpukan padat TBS.
-        Membagi citra ke irisan mikro yang diperbesar ke resolusi model (640x640),
-        menerapkan CLAHE lokal, lalu menggabungkan deteksi global dan lokal dengan NMS.
+        Slicing Aided Hyper Inference (SAHI) untuk tumpukan padat TBS di ramp loading.
+        Membagi citra ke irisan mikro beresolusi tinggi, menerapkan CLAHE lokal,
+        lalu menggabungkan deteksi global dan lokal dengan NMS, filter geometri, dan IoM suppression.
         """
         import cv2
         import numpy as np
@@ -294,16 +296,15 @@ class YOLOInferenceEngine:
             return []
 
         h, w = img_cv.shape[:2]
-        # Ukuran tile adaptif proporsional dimensi citra (220 - 320 px)
         tile_size = max(180, min(300, int(min(w, h) * 0.48)))
         overlap = 0.35
         step = max(50, int(tile_size * (1 - overlap)))
 
         all_candidates = []
 
-        # 1. Inferensi Global Full-Image untuk menangkap tandan besar di depan
+        # 1. Inferensi Global Full-Image untuk tandan besar di latar depan
         if hasattr(self.model, "predict"):
-            res_full = self.model.predict(source=img_cv, conf=0.18, iou=0.50, verbose=False)
+            res_full = self.model.predict(source=img_cv, conf=0.25, iou=0.45, verbose=False)
             if len(res_full) > 0 and len(res_full[0].boxes) > 0:
                 for b in res_full[0].boxes:
                     bx1, by1, bx2, by2 = b.xyxy[0].tolist()
@@ -332,26 +333,25 @@ class YOLOInferenceEngine:
                 if tile.shape[0] < 40 or tile.shape[1] < 40:
                     continue
 
-                # Local CLAHE pada irisan untuk memperjelas batas brondolan & tangkai
+                # Local CLAHE pada irisan untuk mempertegas kontur brondolan
                 lab = cv2.cvtColor(tile, cv2.COLOR_BGR2LAB)
                 l_chan, a_chan, b_chan = cv2.split(lab)
                 cl = clahe_obj.apply(l_chan)
                 enhanced_tile = cv2.cvtColor(cv2.merge((cl, a_chan, b_chan)), cv2.COLOR_LAB2BGR)
 
-                # Perbesar irisan ke 640x640 agar tandan kecil di belakang ter-magnifikasi 2x-3x
+                # Perbesar irisan ke 640x640 agar tandan kecil di tumpukan belakang ter-magnifikasi
                 tile_resized = cv2.resize(enhanced_tile, (640, 640), interpolation=cv2.INTER_LANCZOS4)
 
-                res_tile = self.model.predict(source=tile_resized, conf=0.20, iou=0.45, verbose=False)
+                res_tile = self.model.predict(source=tile_resized, conf=0.25, iou=0.45, verbose=False)
                 if len(res_tile) > 0 and len(res_tile[0].boxes) > 0:
                     for b_box in res_tile[0].boxes:
                         tb_x1, tb_y1, tb_x2, tb_y2 = b_box.xyxy[0].tolist()
-                        # Proyeksikan kembali koordinat irisan ke koordinat kanvas global
                         gx1 = x1 + (tb_x1 / 640.0) * (x2 - x1)
                         gy1 = y1 + (tb_y1 / 640.0) * (y2 - y1)
                         gx2 = x1 + (tb_x2 / 640.0) * (x2 - x1)
                         gy2 = y1 + (tb_y2 / 640.0) * (y2 - y1)
 
-                        # Filter dedaunan hijau di latar belakang pohon/langit
+                        # Filter vegetasi hijau kanopi di luar tumpukan
                         roi_cand = img_cv[max(0, int(gy1)):min(h, int(gy2)), max(0, int(gx1)):min(w, int(gx2))]
                         if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
                             hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
@@ -360,7 +360,7 @@ class YOLOInferenceEngine:
                             if green_ratio > 0.28:
                                 continue
 
-                            # Filter awan/langit terbuka terang
+                            # Filter langit terbuka / seng atap reflektif
                             sky_pixels = (roi_cand[:, :, 0] > 175) & (roi_cand[:, :, 1] > 175) & (roi_cand[:, :, 2] > 175)
                             if np.sum(sky_pixels) / (roi_cand.shape[0] * roi_cand.shape[1]) > 0.06:
                                 continue
@@ -373,34 +373,67 @@ class YOLOInferenceEngine:
         if not all_candidates:
             return []
 
-        # 3. Batched NMS untuk menggabungkan deteksi global dan irisan
+        # 3. Batched NMS
         boxes_coords = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in all_candidates]
         confs = [b[4] for b in all_candidates]
 
         keep_indices = cv2.dnn.NMSBoxes(
             bboxes=boxes_coords,
             scores=confs,
-            score_threshold=0.18,
-            nms_threshold=0.38
+            score_threshold=0.30,
+            nms_threshold=0.35
         )
 
-        merged_results = []
+        pre_filtered = []
         if len(keep_indices) > 0:
             for idx in keep_indices.flatten():
                 cand = all_candidates[idx]
-                merged_results.append({
+                pre_filtered.append({
                     "class_name": cand[5],
                     "confidence": round(float(cand[4]), 3),
                     "bbox": [round(float(cand[0]), 1), round(float(cand[1]), 1), round(float(cand[2]), 1), round(float(cand[3]), 1)]
                 })
 
-        return merged_results
+        # 4. Pruning Geometris & IoM Suppression (Menghilangkan box irisan terpotong & nested duplicates)
+        cands = []
+        for d in pre_filtered:
+            bx1, by1, bx2, by2 = d["bbox"]
+            bw = bx2 - bx1
+            bh = by2 - by1
+            area = bw * bh
+            if bw < 35 or bh < 35 or area < 1400:
+                continue
+            ar = bw / max(1.0, bh)
+            if ar < 0.40 or ar > 2.4:
+                continue
+            cands.append(d)
+
+        cands.sort(key=lambda x: x["confidence"], reverse=True)
+        final_boxes = []
+        for c in cands:
+            cx1, cy1, cx2, cy2 = c["bbox"]
+            carea = (cx2 - cx1) * (cy2 - cy1)
+            suppress = False
+            for k in final_boxes:
+                kx1, ky1, kx2, ky2 = k["bbox"]
+                karea = (kx2 - kx1) * (ky2 - ky1)
+                ix1, iy1 = max(cx1, kx1), max(cy1, ky1)
+                ix2, iy2 = min(cx2, kx2), min(cy2, ky2)
+                inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+                iom = inter / min(carea, karea)
+                if iom > 0.48:
+                    suppress = True
+                    break
+            if not suppress:
+                final_boxes.append(c)
+
+        return final_boxes
 
     def _refine_ripeness_by_chroma(self, source_obj: Any, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Chromatic Ripeness Verifier (CRV):
-        Memvalidasi klasifikasi fraksi kematangan berbasis analisis spektral warna (HSV & RGB)
-        pada ROI brondolan sawit guna mengoreksi domain bias / imbalanced training dataset.
+        Memvalidasi klasifikasi fraksi kematangan berbasis rasio spektral warna mesokarp sawit (HSV & RGB)
+        guna mengoreksi domain bias tanpa merusak deteksi kelas khusus (abnormal, janjang kosong, lewat matang).
         """
         if not detections:
             return detections
@@ -409,21 +442,18 @@ class YOLOInferenceEngine:
             import cv2
             import numpy as np
 
-            if isinstance(source_obj, str):
-                img_cv = cv2.imread(source_obj)
-            elif isinstance(source_obj, Image.Image):
-                img_cv = cv2.cvtColor(np.array(source_obj), cv2.COLOR_RGB2BGR)
-            elif isinstance(source_obj, np.ndarray):
-                img_cv = source_obj
-            else:
-                return detections
-
+            img_cv = self._to_cv2(source_obj)
             if img_cv is None:
                 return detections
 
             img_h, img_w = img_cv.shape[:2]
 
             for item in detections:
+                curr_cls = item["class_name"]
+                # Jangan ganggu identifikasi buah abnormal dan janjang kosong
+                if curr_cls in ["abnormal", "empty_bunch"]:
+                    continue
+
                 x1, y1, x2, y2 = [int(c) for c in item["bbox"]]
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(img_w, x2), min(img_h, y2)
@@ -434,22 +464,30 @@ class YOLOInferenceEngine:
                 roi = img_cv[y1:y2, x1:x2]
                 hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-                # Mask spektral oranye & merah mesokarp sawit masak
+                # Spektrum oranye & merah mesokarp sawit (Fraksi 2 & 3)
                 orange_mask = cv2.inRange(hsv, np.array([5, 70, 70]), np.array([25, 255, 255]))
                 red_mask = cv2.inRange(hsv, np.array([170, 70, 70]), np.array([180, 255, 255]))
                 chroma_ratio = (np.sum(orange_mask > 0) + np.sum(red_mask > 0)) / (roi.shape[0] * roi.shape[1])
-                mean_b, mean_g, mean_r = np.mean(roi, axis=(0, 1))
+                bm, gm, rm = np.mean(roi, axis=(0, 1))
+                norm_r = rm / max(1.0, (rm + gm + bm))
 
-                # Koreksi fraksi berbasis standar kromatik PPKS
-                if chroma_ratio >= 0.75 and mean_r >= 145:
-                    item["class_name"] = "ripe"
-                    item["confidence"] = max(item["confidence"], 0.92)
-                elif chroma_ratio >= 0.52 and mean_r >= 115:
-                    item["class_name"] = "underripe"
-                    item["confidence"] = max(item["confidence"], 0.88)
-                elif chroma_ratio < 0.50 and mean_r <= 112:
-                    item["class_name"] = "unripe"
-                    item["confidence"] = max(item["confidence"], 0.91)
+                # Koreksi domain bias ketika model salah memprediksi mentah pada buah oranye/merah
+                if curr_cls == "unripe":
+                    if chroma_ratio >= 0.70 and rm >= 135:
+                        item["class_name"] = "ripe"
+                        item["confidence"] = max(item["confidence"], 0.92)
+                    elif chroma_ratio >= 0.50 and rm >= 115:
+                        item["class_name"] = "underripe"
+                        item["confidence"] = max(item["confidence"], 0.88)
+                    elif norm_r >= 0.48 and chroma_ratio >= 0.40:
+                        item["class_name"] = "ripe"
+                        item["confidence"] = max(item["confidence"], 0.90)
+
+                # Koreksi ketika model memprediksi masak pada buah yang dominan gelap/hitam mentah
+                elif curr_cls == "ripe":
+                    if chroma_ratio < 0.20 and rm < 95:
+                        item["class_name"] = "unripe"
+                        item["confidence"] = max(item["confidence"], 0.88)
 
         except Exception as e:
             pass
@@ -472,25 +510,29 @@ class YOLOInferenceEngine:
 
     def draw_annotations(self, image_path: str, detections: List[Dict[str, Any]], output_path: str):
         """
-        Menggambar bounding box berwarna, label kelas, dan confidence pada citra.
+        Menggambar bounding box berwarna beresolusi tinggi, badge label, dan nilai confidence pada citra.
         """
         with Image.open(image_path).convert("RGB") as img:
             draw = ImageDraw.Draw(img)
+            try:
+                font = ImageFont.truetype("arial.ttf", 13)
+            except Exception:
+                font = ImageFont.load_default()
             
             for item in detections:
                 cls_name = item["class_name"]
                 conf = item["confidence"]
                 x1, y1, x2, y2 = item["bbox"]
-                color = self.CLASS_COLORS.get(cls_name, "#ffffff")
+                color = self.CLASS_COLORS.get(cls_name, "#10b981")
                 label_id = self.CLASS_LABELS_ID.get(cls_name, cls_name)
                 text = f"{label_id} ({conf:.0%})"
                 
-                # Gambar kotak luar (tebal 3px)
+                # Bounding box tegas tebal 3px
                 draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
                 
-                # Background text label
-                text_bbox = draw.textbbox((x1, max(0, y1 - 20)), text)
-                draw.rectangle([text_bbox[0] - 2, text_bbox[1] - 2, text_bbox[2] + 4, text_bbox[3] + 2], fill=color)
-                draw.text((x1, max(0, y1 - 20)), text, fill="#ffffff")
+                # Background badge label
+                text_bbox = draw.textbbox((x1, max(0, y1 - 20)), text, font=font)
+                draw.rectangle([text_bbox[0] - 3, text_bbox[1] - 2, text_bbox[2] + 4, text_bbox[3] + 2], fill=color)
+                draw.text((x1, max(0, y1 - 20)), text, fill="#ffffff", font=font)
 
-            img.save(output_path, "JPEG", quality=90)
+            img.save(output_path, "JPEG", quality=95)
