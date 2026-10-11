@@ -95,7 +95,7 @@ class YOLOInferenceEngine:
         else:
             return image_input, (640, 640)
 
-    def _predict_onnx(self, img_pil: Image.Image, orig_w: int, orig_h: int) -> List[Dict[str, Any]]:
+    def _predict_onnx(self, img_pil: Image.Image, orig_w: int, orig_h: int, custom_conf: float = None, custom_iou: float = None) -> List[Dict[str, Any]]:
         """
         Inferensi ONNX Runtime dengan letterbox preprocessing dan vectorized NMS.
         Output shape model: [1, 10, 8400] (4 bbox coords cx,cy,w,h + 6 class scores)
@@ -144,7 +144,10 @@ class YOLOInferenceEngine:
         class_ids = np.argmax(scores, axis=1)
         confidences = np.max(scores, axis=1)
 
-        mask = confidences >= self.conf_threshold
+        conf_thresh = custom_conf if custom_conf is not None else self.conf_threshold
+        iou_thresh = custom_iou if custom_iou is not None else self.iou_threshold
+
+        mask = confidences >= conf_thresh
         boxes = boxes[mask]
         confidences = confidences[mask]
         class_ids = class_ids[mask]
@@ -188,7 +191,7 @@ class YOLOInferenceEngine:
             union = area_i + area_others - inter
             iou = inter / np.maximum(union, 1e-6)
 
-            inds = np.where(iou <= self.iou_threshold)[0]
+            inds = np.where(iou <= iou_thresh)[0]
             order = order[inds + 1]
 
         results = []
@@ -282,6 +285,31 @@ class YOLOInferenceEngine:
             return source_obj
         return None
 
+    def _detect_crop(self, crop_cv, conf: float = 0.25, iou: float = 0.45) -> List[List[Any]]:
+        """
+        Mendeteksi objek pada ROI/tile citra (NumPy BGR).
+        Mendukung PyTorch YOLO (.pt) maupun ONNX Runtime (.onnx).
+        Mengembalikan list candidate: [[x1, y1, x2, y2, conf, cls_name], ...]
+        """
+        import cv2
+        if self.is_onnx and self.model:
+            h, w = crop_cv.shape[:2]
+            pil_tile = Image.fromarray(cv2.cvtColor(crop_cv, cv2.COLOR_BGR2RGB))
+            dets = self._predict_onnx(pil_tile, w, h, custom_conf=conf, custom_iou=iou)
+            return [[d["bbox"][0], d["bbox"][1], d["bbox"][2], d["bbox"][3], d["confidence"], d["class_name"]] for d in dets]
+        elif self.model and hasattr(self.model, "predict"):
+            res = self.model.predict(source=crop_cv, conf=conf, iou=iou, verbose=False)
+            results = []
+            if len(res) > 0 and len(res[0].boxes) > 0:
+                for b in res[0].boxes:
+                    bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+                    cls_id = int(b.cls[0])
+                    raw_name = self.model.names[cls_id] if hasattr(self.model, "names") else self.CLASSES[0]
+                    cls_name = self.BINUS_MAPPING.get(raw_name, "ripe")
+                    results.append([bx1, by1, bx2, by2, float(b.conf[0]), cls_name])
+            return results
+        return []
+
     def _predict_tiled(self, source_obj: Any, orig_w: int, orig_h: int) -> List[Dict[str, Any]]:
         """
         Slicing Aided Hyper Inference (SAHI) untuk tumpukan padat TBS di ramp loading.
@@ -303,23 +331,17 @@ class YOLOInferenceEngine:
         all_candidates = []
 
         # 1. Inferensi Global Full-Image untuk tandan besar di latar depan
-        if hasattr(self.model, "predict"):
-            res_full = self.model.predict(source=img_cv, conf=0.25, iou=0.45, verbose=False)
-            if len(res_full) > 0 and len(res_full[0].boxes) > 0:
-                for b in res_full[0].boxes:
-                    bx1, by1, bx2, by2 = b.xyxy[0].tolist()
-                    roi_cand = img_cv[max(0, int(by1)):min(h, int(by2)), max(0, int(bx1)):min(w, int(bx2))]
-                    if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
-                        hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
-                        green_mask = cv2.inRange(hsv_cand, np.array([35, 40, 40]), np.array([85, 255, 255]))
-                        green_ratio = np.sum(green_mask > 0) / (roi_cand.shape[0] * roi_cand.shape[1])
-                        if green_ratio > 0.28:
-                            continue
-
-                    cls_id = int(b.cls[0])
-                    raw_name = self.model.names[cls_id] if hasattr(self.model, "names") else self.CLASSES[0]
-                    cls_name = self.BINUS_MAPPING.get(raw_name, "ripe")
-                    all_candidates.append([bx1, by1, bx2, by2, float(b.conf[0]), cls_name])
+        global_cands = self._detect_crop(img_cv, conf=0.25, iou=0.45)
+        for b in global_cands:
+            bx1, by1, bx2, by2, bconf, bcls = b
+            roi_cand = img_cv[max(0, int(by1)):min(h, int(by2)), max(0, int(bx1)):min(w, int(bx2))]
+            if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
+                hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
+                green_mask = cv2.inRange(hsv_cand, np.array([35, 40, 40]), np.array([85, 255, 255]))
+                green_ratio = np.sum(green_mask > 0) / (roi_cand.shape[0] * roi_cand.shape[1])
+                if green_ratio > 0.28:
+                    continue
+            all_candidates.append([bx1, by1, bx2, by2, bconf, bcls])
 
         # 2. Slicing Aided Hyper Inference pada setiap irisan mikro
         clahe_obj = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
@@ -342,33 +364,29 @@ class YOLOInferenceEngine:
                 # Perbesar irisan ke 640x640 agar tandan kecil di tumpukan belakang ter-magnifikasi
                 tile_resized = cv2.resize(enhanced_tile, (640, 640), interpolation=cv2.INTER_LANCZOS4)
 
-                res_tile = self.model.predict(source=tile_resized, conf=0.25, iou=0.45, verbose=False)
-                if len(res_tile) > 0 and len(res_tile[0].boxes) > 0:
-                    for b_box in res_tile[0].boxes:
-                        tb_x1, tb_y1, tb_x2, tb_y2 = b_box.xyxy[0].tolist()
-                        gx1 = x1 + (tb_x1 / 640.0) * (x2 - x1)
-                        gy1 = y1 + (tb_y1 / 640.0) * (y2 - y1)
-                        gx2 = x1 + (tb_x2 / 640.0) * (x2 - x1)
-                        gy2 = y1 + (tb_y2 / 640.0) * (y2 - y1)
+                tile_cands = self._detect_crop(tile_resized, conf=0.25, iou=0.45)
+                for tb in tile_cands:
+                    tb_x1, tb_y1, tb_x2, tb_y2, tb_conf, tb_cls = tb
+                    gx1 = x1 + (tb_x1 / 640.0) * (x2 - x1)
+                    gy1 = y1 + (tb_y1 / 640.0) * (y2 - y1)
+                    gx2 = x1 + (tb_x2 / 640.0) * (x2 - x1)
+                    gy2 = y1 + (tb_y2 / 640.0) * (y2 - y1)
 
-                        # Filter vegetasi hijau kanopi di luar tumpukan
-                        roi_cand = img_cv[max(0, int(gy1)):min(h, int(gy2)), max(0, int(gx1)):min(w, int(gx2))]
-                        if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
-                            hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
-                            green_mask = cv2.inRange(hsv_cand, np.array([35, 40, 40]), np.array([85, 255, 255]))
-                            green_ratio = np.sum(green_mask > 0) / (roi_cand.shape[0] * roi_cand.shape[1])
-                            if green_ratio > 0.28:
-                                continue
+                    # Filter vegetasi hijau kanopi di luar tumpukan
+                    roi_cand = img_cv[max(0, int(gy1)):min(h, int(gy2)), max(0, int(gx1)):min(w, int(gx2))]
+                    if roi_cand.shape[0] > 10 and roi_cand.shape[1] > 10:
+                        hsv_cand = cv2.cvtColor(roi_cand, cv2.COLOR_BGR2HSV)
+                        green_mask = cv2.inRange(hsv_cand, np.array([35, 40, 40]), np.array([85, 255, 255]))
+                        green_ratio = np.sum(green_mask > 0) / (roi_cand.shape[0] * roi_cand.shape[1])
+                        if green_ratio > 0.28:
+                            continue
 
-                            # Filter langit terbuka / seng atap reflektif
-                            sky_pixels = (roi_cand[:, :, 0] > 175) & (roi_cand[:, :, 1] > 175) & (roi_cand[:, :, 2] > 175)
-                            if np.sum(sky_pixels) / (roi_cand.shape[0] * roi_cand.shape[1]) > 0.06:
-                                continue
+                        # Filter langit terbuka / seng atap reflektif
+                        sky_pixels = (roi_cand[:, :, 0] > 175) & (roi_cand[:, :, 1] > 175) & (roi_cand[:, :, 2] > 175)
+                        if np.sum(sky_pixels) / (roi_cand.shape[0] * roi_cand.shape[1]) > 0.06:
+                            continue
 
-                        cls_id = int(b_box.cls[0])
-                        raw_name = self.model.names[cls_id] if hasattr(self.model, "names") else self.CLASSES[0]
-                        cls_name = self.BINUS_MAPPING.get(raw_name, "ripe")
-                        all_candidates.append([gx1, gy1, gx2, gy2, float(b_box.conf[0]), cls_name])
+                    all_candidates.append([gx1, gy1, gx2, gy2, tb_conf, tb_cls])
 
         if not all_candidates:
             return []

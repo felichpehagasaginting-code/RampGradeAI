@@ -69,46 +69,52 @@ async def predict_grading(
     orig_path = settings.UPLOAD_DIR / orig_filename
     annotated_path = settings.UPLOAD_DIR / annotated_filename
 
-    # Simpan citra asli
-    with open(orig_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        # Simpan citra asli
+        with open(orig_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    # Jalankan inferensi YOLO / ONNX (dengan opsi dense_mode SAHI)
-    detections, latency_ms = inference_engine.predict(str(orig_path), dense_mode=dense_mode)
+        # Jalankan inferensi YOLO / ONNX (dengan opsi dense_mode SAHI)
+        detections, latency_ms = inference_engine.predict(str(orig_path), dense_mode=dense_mode)
 
-    # Gambar bounding box dan anotasi
-    inference_engine.draw_annotations(str(orig_path), detections, str(annotated_path))
+        # Gambar bounding box dan anotasi
+        inference_engine.draw_annotations(str(orig_path), detections, str(annotated_path))
 
-    # Agregasi hitungan kelas
-    counts = {"unripe": 0, "underripe": 0, "ripe": 0, "overripe": 0, "long_stalk": int(long_stalk_count)}
-    for item in detections:
-        cls = item["class_name"]
-        if cls in counts:
-            counts[cls] += 1
+        # Agregasi hitungan kelas
+        counts = {"unripe": 0, "underripe": 0, "ripe": 0, "overripe": 0, "long_stalk": int(long_stalk_count)}
+        for item in detections:
+            cls = item["class_name"]
+            if cls in counts:
+                counts[cls] += 1
 
-    # Ambil bobot SPB jika delivery_order_id disediakan
-    net_weight = None
-    if delivery_order_id:
-        order = db.query(DeliveryOrder).filter(DeliveryOrder.id == delivery_order_id).first()
-        if order:
-            net_weight = order.net_weight_kg
+        # Ambil bobot SPB jika delivery_order_id disediakan
+        net_weight = None
+        if delivery_order_id:
+            order = db.query(DeliveryOrder).filter(DeliveryOrder.id == delivery_order_id).first()
+            if order:
+                net_weight = order.net_weight_kg
 
-    # Hitung OER
-    assessment = OERCalculator.calculate(counts=counts, net_weight_kg=net_weight, long_stalk_count=int(long_stalk_count))
+        # Hitung OER
+        assessment = OERCalculator.calculate(counts=counts, net_weight_kg=net_weight, long_stalk_count=int(long_stalk_count))
 
-    bbox_results = [
-        BoundingBox(class_name=d["class_name"], confidence=d["confidence"], bbox=d["bbox"])
-        for d in detections
-    ]
+        bbox_results = [
+            BoundingBox(class_name=d["class_name"], confidence=d["confidence"], bbox=d["bbox"])
+            for d in detections
+        ]
 
-    return GradingPredictionResponse(
-        session_code=session_code,
-        inference_latency_ms=latency_ms,
-        image_url=f"/uploads/{orig_filename}",
-        annotated_image_url=f"/uploads/{annotated_filename}",
-        detections=bbox_results,
-        assessment=assessment
-    )
+        return GradingPredictionResponse(
+            session_code=session_code,
+            inference_latency_ms=latency_ms,
+            image_url=f"/uploads/{orig_filename}",
+            annotated_image_url=f"/uploads/{annotated_filename}",
+            detections=bbox_results,
+            assessment=assessment
+        )
+    except Exception as e:
+        import traceback
+        err_msg = f"Grading prediction error: {str(e)}\n{traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 @router.post("/predict-frame", response_model=CameraFramePredictionResponse)
 async def predict_camera_frame(
